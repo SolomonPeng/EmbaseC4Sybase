@@ -1,0 +1,107 @@
+
+#include <string.h>
+#include <stdio.h>
+#include <sqlca.h>
+#include <stdlib.h>
+#include <sqlda.h>
+#include <sqlcpr.h>
+
+
+
+#define SQLNOTFOUND 		1403
+#define SQLNOTCONNECT 		1012
+#define SQLUNIQUE		1
+#define SQLEXIST		-1
+#define DB_USERNAME 		"ibss@CMMS"
+#define DB_PASSWORD 		"ibss"
+
+
+void sql_error(msg)
+    char *msg;
+{
+    size_t clen, fc;
+    char cbuf[128];
+ 
+    clen = sizeof (cbuf);
+    sqlgls((char *)cbuf, (size_t *)&clen, (size_t *)&fc);
+ 
+    printf("\n%s\n", msg);
+    printf("Statement is--\n%s\n", cbuf);
+    printf("Function code is %ld\n\n", fc);
+ 
+    sqlglm((char *)cbuf, (size_t *) &clen, (size_t *) &clen);
+    printf ("\n%.*s\n", clen, cbuf);
+  
+    EXEC SQL WHENEVER SQLERROR CONTINUE;
+    EXEC SQL ROLLBACK WORK RELEASE;
+    exit(EXIT_FAILURE);
+}
+
+int connect_db (void)
+{
+  EXEC SQL begin declare section;
+  char  db_username[40], db_password[40];
+  EXEC SQL end   declare section;
+
+  strcpy (db_username, DB_USERNAME);
+  strcpy (db_password, DB_PASSWORD);
+
+  EXEC SQL connect :db_username identified by :db_password;
+  if (SQLCODE) 
+  {
+    printf("Error connect to database : [%d]", SQLCODE);
+    return (-1);
+  }
+  return (0);
+}
+
+int commit_db_release()
+{
+        EXEC SQL commit release;
+        if (SQLCODE)
+        {
+                printf("Fail commit release to db[%d]\n", SQLCODE);
+                return -1;
+        }
+        return 0;
+}
+
+int commit_db()
+{
+        EXEC SQL commit;
+        if (SQLCODE)
+        {
+        	  printf("Commit Database Fail!SQLCODE[%d]\n",SQLCODE);
+            return -1;
+        }
+        return 0;
+}
+
+void main()
+{
+	EXEC SQL begin declare section;
+	char  i_HANDLE_TYPE[2];
+	char  i_ACC_NBR[20];
+	char  i_CUST_CODE[20];
+	char  o_STAFF_ID[10];
+	char  o_STAFF_NAME[50];
+	char  o_CUST_TYPE[5];
+	char  o_RESULT[100];
+	EXEC SQL end declare section; 
+	
+	strcpy(i_HANDLE_TYPE,"1");
+	strcpy(i_ACC_NBR,"37585935");
+	
+	connect_db();
+	EXEC SQL EXECUTE
+            begin
+                CMMS3.get_serv_staff(:i_HANDLE_TYPE, :i_ACC_NBR, :i_CUST_CODE, :o_STAFF_ID, :o_STAFF_NAME, :o_CUST_TYPE, :o_RESULT);
+            end;
+        END-EXEC;
+ 
+        printf("i_ACC_NBR: %s--\n", i_ACC_NBR);
+        printf("o_STAFF_ID: %s--\n", o_STAFF_ID);
+        printf("o_STAFF_NAME: %s--\n", o_STAFF_NAME);
+  
+  EXEC SQL WHENEVER SQLERROR CONTINUE;
+}

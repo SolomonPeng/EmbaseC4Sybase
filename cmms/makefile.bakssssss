@@ -1,0 +1,21 @@
+include $(ORACLE_HOME)/precomp/lib/env_precomp.mk
+
+PROC=proc
+CC=/opt/SUNWspro/bin/cc
+LOCALFLAGS= sqlcheck=full userid=ibss/ibss@CMMS MODE=ORACLE CODE=ANSI_C ORACA=YES def_sqlcode=YES char_map=string  UNSAFE_NULL=YES DBMS=v8
+ORACLE_LIB=$(LLIBCLNTSH)
+ORALIB=-I$(ORACLE_HOME)/precomp/public
+
+all: cmms 
+
+
+cmms : cmms.c
+	$(CC) $(CFLAGS64) -o cmms  -L$(ORACLE_HOME)/lib $(ORACLE_LIB) $(ORALIB) -D_ANSIC $?
+	
+cmms.c : cmms.pc
+	$(PROC) $(LOCALFLAGS) \
+	iname=$*.pc \
+	oname=$*.c
+        
+clean: 
+	rm -f *.o cmms cmms.c 

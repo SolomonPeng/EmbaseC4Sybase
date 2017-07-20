@@ -1,0 +1,32 @@
+# Make the Embedded SQL/C sample programs.
+#
+# Change the following definitions as appropriate for your site:
+# MAKE = make CC="$(CC)" AS="$(AS)" LD="$(LD)" AR="$(AR)" CPP="$(CPP)" SYBPLATFORM="$(SYBPLATFORM)" 
+#
+SHELL       = /bin/sh
+HEADERS     = ./sybsqlex.h
+ 
+TARGET      = ifdas
+OCSBASE     = `sh sybopts.sh ocsbase`
+INCLUDE     = -I. -I$${SYBASE}/$${SYBASE_OCS}/include
+LIBFLAGS    = -L$${SYBASE}/$${SYBASE_OCS}/lib
+SYBLIBDIR   = $(OCSBASE)/lib/
+CFLAGS      = $(INCLUDE) $(LIBFLAGS)
+PRECOMP     = `sh sybopts.sh precomp`
+LINK.c	    = `sh sybopts.sh compile` $(CFLAGS)
+ 
+SYBLIBS     = `sh sybopts.sh ct cs comlibs`
+SYSLIBS     = `sh sybopts.sh syslibs` 
+
+
+all: 	$(TARGET) 
+
+
+$(TARGET): $(HEADERS) ifdas.c
+	$(LINK.c) -o $@ $(OCSBASE)/include/sybesql.c ifdas.c $(SYBLIBS) $(SYSLIBS)
+ 
+ifdas.c: ifdas.cp
+	$(PRECOMP) ifdas.cp
+
+clean: 
+	rm -f *.o $(TARGET) ifdas.c 

@@ -1,0 +1,166 @@
+#include <stdio.h>
+#include <sybhesql.h>
+#include <time.h>
+
+#define USER       "adsl" 
+#define PASSWORD   "adsl06"   
+#define SERVER     "IVIEW"
+#define ERREXIT	-1
+#define STDEXIT	0
+
+EXEC SQL INCLUDE SQLCA;
+
+int main()
+{
+	EXEC SQL BEGIN DECLARE SECTION;
+	/* storage for login name and password. */
+	CS_CHAR	username[30];
+	CS_CHAR	password[30];
+	CS_CHAR server[30];
+	EXEC SQL END DECLARE SECTION;
+	
+	EXEC SQL WHENEVER SQLERROR CALL error_handler();
+	EXEC SQL WHENEVER SQLWARNING CALL warning_handler();
+	EXEC SQL WHENEVER NOT FOUND CONTINUE;
+	
+	strcpy(username, USER);
+	strcpy(password, PASSWORD);
+	strcpy(server,   SERVER);
+
+	EXEC SQL CONNECT :username IDENTIFIED BY :password using :server;
+
+	EXEC SQL USE adsl;
+	
+	EXEC SQL BEGIN DECLARE SECTION;
+	/* storage for login name and password. */
+	CS_CHAR	szUser_acct[30];
+	CS_CHAR	szLogin_time_tmp[30];
+	CS_CHAR szLogout_time_tmp[30];
+	CS_INT  iData_in_out;
+	EXEC SQL END DECLARE SECTION;
+	
+	EXEC SQL DECLARE qd_cr CURSOR FOR
+	SELECT user_acct, login_time_tmp, logout_time_tmp, data_in+data_out as datainout
+	FROM adsl.t_org_dht_qd WHERE user_acct NOT LIKE '%@163.gd';
+
+	EXEC SQL OPEN qd_cr;
+	
+	int count=0;
+	char buf[200];
+	for (;;)
+	{
+		if (sqlca.sqlcode == 100)
+				break;
+		EXEC SQL FETCH qd_cr INTO :szUser_acct,:szLogin_time_tmp,:szLogout_time_tmp,:iData_in_out;
+		EXEC SQL UPDATE adsl.t_org_dht_qd 
+		SET login_time 	= CONVERT(DATETIME,SUBSTRING(:szLogin_time_tmp,1,8)+' '+SUBSTRING(:szLogin_time_tmp,9,2)+':'+SUBSTRING(:szLogin_time_tmp,11,2)+':'+SUBSTRING(:szLogin_time_tmp,13,2)),
+				logout_time = CONVERT(DATETIME,SUBSTRING(:szLogout_time_tmp,1,8)+' '+SUBSTRING(:szLogout_time_tmp,9,2)+':'+SUBSTRING(:szLogin_time_tmp,11,2)+':'+SUBSTRING(:szLogout_time_tmp,13,2)),
+				data_in_out = :iData_in_out,
+				imp_time = getdate()
+		WHERE CURRENT OF qd_cr;
+		EXEC SQL COMMIT WORK;
+		count++;
+		sprintf(buf,"已处理数据%d条",count);
+		if(count%10==0)
+		{
+			write_log("INFO",buf);
+		}
+	}
+	
+	EXEC SQL CLOSE qd_cr;
+	EXEC SQL DEALLOCATE CURSOR qd_cr;
+	printf("setIlligalInfo Complete \n");
+	write_log("INFO","update cf_dht_qd Complete");
+	
+	
+	EXEC SQL DISCONNECT DEFAULT;
+
+	exit (STDEXIT);
+	
+	return 0;
+}
+
+void error_handler()
+{
+	
+	char  sqlInfo[1024];
+  char  sqlInfoToken[1024];
+
+  strcpy(sqlInfo, "");
+  sprintf( sqlInfoToken, "SQLCODE       = %ld\n", sqlca.sqlcode);
+  strcat( sqlInfo, sqlInfoToken);		
+  sprintf(buf,"%s,%s",sqlInfo,sqlca.sqlerrm.sqlerrmc);
+  write_log("ERROR",buf);
+}
+
+void warning_handler()
+{
+	char  sqlInfo[1024];
+
+     strcpy(sqlInfo, "");
+     if (sqlca.sqlwarn[0]=='W')
+        strcat( sqlInfo, "One Or more warning conditions occurred!\n");	
+     if (sqlca.sqlwarn[1]=='W')
+        strcat( sqlInfo, "You designated in a fetch statement was too short to store the statement's result data,so the result data was truncated or designated no indicator variable to receive the original length of the data that was truncated.!\n");	
+     if (sqlca.sqlwarn[2]=='W')
+        strcat( sqlInfo, "The input sent to adaptive Server contained a null value in an illegal context,such as in an expression or as an input value to a table than prohibits null values.!\n");	
+     if (sqlca.sqlwarn[3]=='W')
+        strcat( sqlInfo, "The numbers of columns in a select statement's result set exceeds the number of host variables in the statement's into clause!\n");	
+     if (sqlca.sqlwarn[5]=='W')
+        strcat( sqlInfo, "SQL Server generated a conversion error while attempting to execute this statement.\n");	
+ 
+     sprintf(buf,"%s",sqlInfo);
+  	 write_log("ERROR",buf);
+}
+
+char *getdate8 (char *buff)
+{
+  struct tm     *tm_now;
+  time_t        time_now;
+  static char   sbuff[20];
+
+  time_now = time (NULL);
+  tm_now = localtime (&time_now);
+  if (buff != NULL)  {
+    sprintf (buff, "%04d%02d%02d", tm_now->tm_year + 1900,
+                        tm_now->tm_mon + 1, tm_now->tm_mday);
+    return (buff);
+  } else  {
+    sprintf (sbuff, "%04d%02d%02d", tm_now->tm_year + 1900,
+                        tm_now->tm_mon + 1, tm_now->tm_mday);
+    return (sbuff);
+  }
+}
+
+char *gettime1 (char *buff)
+{
+  struct tm     *tm_now;
+  time_t        time_now;
+  static char   sbuff[20];
+
+  time_now = time (NULL);
+  tm_now = localtime (&time_now);
+  if (buff != NULL)  {
+    sprintf (buff, "%02d:%02d:%02d", tm_now->tm_hour, tm_now->tm_min,
+                        tm_now->tm_sec);
+    return (buff);
+  } else  {
+    sprintf (sbuff, "%02d:%02d:%02d", tm_now->tm_hour, tm_now->tm_min,
+                        tm_now->tm_sec);
+    return (sbuff);
+  }
+}
+
+
+void write_log (const char *level,const char * msg)
+{
+  FILE          *fp;
+  char          w_buff1[20], w_buff2[20];
+  strcpy(g_logpath,"./log/dhtqd");
+  strcat(g_logpath,getdate8(w_buff1));
+  fp = fopen (g_logpath, "a+");
+  if (fp != NULL)  {
+    fprintf (fp, "%s;%s;[%s];%s;\n", getdate8(w_buff1), gettime1(w_buff2),level,msg);
+  }
+  fclose (fp);
+}
